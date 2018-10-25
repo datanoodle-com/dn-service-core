@@ -1,0 +1,23 @@
+{
+  "name": "mydoc/php-service-core",
+  "description": "This is the base php service that has all the major functionality used by the child services",
+  "require": {
+    "guzzlehttp/guzzle": "^6.3",
+    "php-amqplib/php-amqplib": "^2.7",
+    "nesbot/carbon": "^1.22",
+    "predis/predis": "^1.1",
+    "ramsey/uuid": "^3.8",
+    "vlucas/phpdotenv": "^2.5"
+  },
+  "authors": [
+    {
+      "name": "Aris Abramian",
+      "email": "aris.abramian@datanoodle.com"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "DataNoodle\\": "src/"
+    }
+  }
+}
