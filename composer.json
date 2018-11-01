@@ -7,7 +7,9 @@
     "nesbot/carbon": "^1.22",
     "predis/predis": "^1.1",
     "ramsey/uuid": "^3.8",
-    "vlucas/phpdotenv": "^2.5"
+    "vlucas/phpdotenv": "^2.5",
+    "ext-json": "*",
+    "ext-mysqli": "*"
   },
   "authors": [
     {

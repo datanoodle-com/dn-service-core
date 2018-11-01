@@ -7,7 +7,6 @@ use Carbon\Carbon;
 use ErrorException;
 use Ramsey\Uuid\Uuid;
 use Predis\Client as Redis;
-use GuzzleHttp\Client as Guzzle;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Exception\AMQPIOException;
 use GuzzleHttp\Exception\ClientException;
@@ -127,6 +126,7 @@ abstract class Service implements rabbitInterface
             $this->dotenv->required('RMQ_RECONNECT_TIMEOUT')->isInteger();
             $this->dotenv->required('STD_LOGGING')->isBoolean();
             $this->dotenv->load();
+            return true;
         } catch (\RuntimeException $e) {
             $this->log($e->getMessage(),self::ERROR);
             exit;
@@ -200,9 +200,13 @@ abstract class Service implements rabbitInterface
         $this->pass = getenv('RMQ_PASSWORD');
     }
 
-    public function setSSL()
+    public function setSSL($ssl = null)
     {
-        $this->ssl = filter_var(getenv('RMQ_SSL'),FILTER_VALIDATE_BOOLEAN);
+        if (empty($ssl)) {
+            $this->ssl = filter_var(getenv('RMQ_SSL'), FILTER_VALIDATE_BOOLEAN);
+        } else {
+            $this->ssl = $ssl;
+        }
     }
 
     public function setPeerName()
@@ -387,7 +391,7 @@ abstract class Service implements rabbitInterface
         $this->logToStackDriver($array, $level);
 
         if (!in_array($level, [self::INFO,self::DEBUG]) && !empty($exception)) {
-            $this->processFailure($exception, $level);
+            $this->processFailure($exception);
         }
 
     }
