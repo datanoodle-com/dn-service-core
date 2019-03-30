@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use ErrorException;
 use Ramsey\Uuid\Uuid;
 use Predis\Client as Redis;
+use GuzzleHttp\Client as Guzzle;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Exception\AMQPIOException;
 use GuzzleHttp\Exception\ClientException;
@@ -18,7 +19,8 @@ use PhpAmqpLib\Connection\AMQPStreamConnection;
 use PhpAmqpLib\Exception\AMQPProtocolChannelException;
 use PhpAmqpLib\Exception\AMQPProtocolConnectionException;
 
-interface rabbitInterface {
+interface rabbitInterface
+{
     public function processSuccess();
 }
 
@@ -56,6 +58,8 @@ abstract class Service implements rabbitInterface
     protected $errorExchange;
     protected $errorBindingKey;
     protected $reconnect_timeout;
+    protected $serviceLoggingName;
+    protected $schedulerConnected;
 
     const INFO = "INFO";
     const DEBUG = "DEBUG";
@@ -73,10 +77,10 @@ abstract class Service implements rabbitInterface
         $name
     ) {
         set_error_handler([&$this, 'exception_error_handler']);
-        $this->setName($name);
         $this->setVersion();
         $this->setRedis();
         $this->getEnvVariables();
+        $this->setName($name);
         $this->setSSL();
         $this->setHost();
         $this->setPort();
@@ -90,51 +94,62 @@ abstract class Service implements rabbitInterface
         $this->setConnected(false);
     }
 
-    private function setSQL($sql) {
+    private function setSQL($sql)
+    {
         $this->sql = $sql;
     }
 
-    private function setRedis() {
+    private function setRedis()
+    {
         $this->redis = new Redis();
     }
 
-    private function setVersion() {
+    private function setVersion()
+    {
         $this->version = self::getVersion();
     }
 
-    private function getEnvVariables() {
-        $this->rootdir = __DIR__ . '/../../../../';
+    private function getEnvVariables()
+    {
+        $this->rootdir = dirname(__DIR__, 4) . '/';
         try {
-            $this->log('Loading environment variables',self::DEBUG);
+            $this->log('Loading environment variables', self::DEBUG);
             $this->dotenv = new Dotenv($this->rootdir);
             $this->dotenv->load();
-            if (!isset($_ENV['RMQ_HOST'])) // checks a variable that should be loaded
-            {
+            if (!isset($_ENV['RMQ_HOST'])) { // checks a variable that should be loaded
                 $this->log('Failed loading the environment variables', self::ERROR);
                 return $this->getEnvVariables(); // if not set, retry ad infinitum
             }
-            $this->log('Succesfully loaded the environment variables', self::DEBUG);
+            $this->log('Successfully loaded the environment variables', self::DEBUG);
             $this->dotenv->required([
                 'RMQ_HOST',
                 'RMQ_USER',
                 'RMQ_PASSWORD',
                 'RMQ_VHOST',
-                'RMQ_PEERNAME',
+                'SCHEDULER_HOST'
             ])->notEmpty();
             $this->dotenv->required('RMQ_SSL')->isBoolean();
             $this->dotenv->required('RMQ_PORT')->isInteger();
             $this->dotenv->required('RMQ_RECONNECT_TIMEOUT')->isInteger();
             $this->dotenv->required('STD_LOGGING')->isBoolean();
             $this->dotenv->load();
+            $this->setScheduler();
             return true;
         } catch (\RuntimeException $e) {
-            $this->log($e->getMessage(),self::ERROR);
+            $this->log($e->getMessage(), self::ERROR);
             exit;
         }
     }
 
-    private function setStdLogging() {
-        $this->stdlogging = filter_var(getenv('STD_LOGGING'),FILTER_VALIDATE_BOOLEAN);
+    private function setScheduler()
+    {
+        $this->guzzle = new Guzzle(['base_uri' => getenv('SCHEDULER_HOST')]);
+        $this->schedulerConnected = true;
+    }
+
+    private function setStdLogging()
+    {
+        $this->stdlogging = filter_var(getenv('STD_LOGGING'), FILTER_VALIDATE_BOOLEAN);
     }
 
     public function connect()
@@ -142,13 +157,23 @@ abstract class Service implements rabbitInterface
         if (!$this->connected) {
             try {
                 if ($this->ssl) {
-                    $this->connection = new AMQPSSLConnection($this->host, $this->port, $this->user, $this->pass,
+                    $this->connection = new AMQPSSLConnection(
+                        $this->host,
+                        $this->port,
+                        $this->user,
+                        $this->pass,
                         $this->vhost,
                         ['verify_peer' => false, 'peer_name' => $this->peername],
-                        ['heartbeat' => 30, 'read_write_timeout' => 60]);
+                        ['heartbeat' => 30, 'read_write_timeout' => 60]
+                    );
                 } else {
-                    $this->connection = new AMQPStreamConnection($this->host, $this->port, $this->user, $this->pass,
-                        $this->vhost);
+                    $this->connection = new AMQPStreamConnection(
+                        $this->host,
+                        $this->port,
+                        $this->user,
+                        $this->pass,
+                        $this->vhost
+                    );
                 }
                 $this->channel = $this->connection->channel();
                 $this->setErrorExchange('svc.data');
@@ -160,7 +185,6 @@ abstract class Service implements rabbitInterface
                 exit;
             }
         }
-
     }
 
     public function useSQL()
@@ -174,20 +198,25 @@ abstract class Service implements rabbitInterface
         $this->dbuser = getenv('DB_USERNAME');
         $this->dbname = getenv('DB_DATABASE');
         $this->dbpassword = getenv('DB_PASSWORD');
-        $this->conn = mysqli_init();
-        if (filter_var(getenv('DB_SSL'),FILTER_VALIDATE_BOOLEAN)) {
+        if (filter_var(getenv('DB_SSL'), FILTER_VALIDATE_BOOLEAN)) {
+            $this->conn = mysqli_init();
             $this->log('Connecting to DB with SSL');
-            mysqli_ssl_set($this->conn, $this->rootdir . 'client-key.pem', $this->rootdir . 'client-cert.pem',
-                $this->rootdir . 'ca.pem', null, null);
+            mysqli_ssl_set(
+                $this->conn,
+                $this->rootdir . 'client-key.pem',
+                $this->rootdir . 'client-cert.pem',
+                $this->rootdir . 'ca.pem',
+                null,
+                null
+            );
         }
         try {
-            $this->conn->real_connect($this->dbhost, $this->dbuser, $this->dbpassword, $this->dbname);
+            $this->conn = mysqli_connect($this->dbhost, $this->dbuser, $this->dbpassword, $this->dbname);
+            //$this->conn->real_connect($this->dbhost, $this->dbuser, $this->dbpassword, $this->dbname);
         } catch (ErrorException $e) {
-            $this->log($e->getMessage(),self::CRITICAL);
+            $this->log($e->getMessage(), self::CRITICAL);
             exit;
         }
-
-
     }
 
     public function setUser()
@@ -231,6 +260,8 @@ abstract class Service implements rabbitInterface
     public function setName($name)
     {
         $this->name = $name;
+
+        $this->serviceLoggingName = getenv("LOGGING_NAME") ?: 'svc-' . $this->name;
     }
 
     public function setVHost()
@@ -246,8 +277,13 @@ abstract class Service implements rabbitInterface
     protected function setErrorExchange($exchange)
     {
         $this->errorExchange = $exchange;
-        $this->channel->exchange_declare($exchange,
-            'topic', false, true, false);
+        $this->channel->exchange_declare(
+            $exchange,
+            'topic',
+            false,
+            true,
+            false
+        );
     }
 
     public function enableSSL()
@@ -314,6 +350,7 @@ abstract class Service implements rabbitInterface
             exit;
         }
     }
+
     public function unbindQueue($routing_key)
     {
         try {
@@ -333,31 +370,113 @@ abstract class Service implements rabbitInterface
 
     public function consume($tag = '', $no_local = false, $no_ack = false, $exclusive = false, $nowait = false)
     {
-        $this->channel->basic_consume($this->queue, $tag, $no_local, $no_ack, $exclusive, $nowait,
-            [&$this, 'callback']);
+        $this->channel->basic_consume(
+            $this->queue,
+            $tag,
+            $no_local,
+            $no_ack,
+            $exclusive,
+            $nowait,
+            [&$this, 'callback']
+        );
         $this->log('Connected');
         $this->log('Waiting for messages');
+    }
+
+    public function checkRedisConnection()
+    {
+        $this->log('Checking redis connection', self::DEBUG);
+        if (!$this->redis->isConnected()) {
+            $this->log('Redis has been disconnected, attempting to reconnect', self::ERROR);
+            $this->redis->connect();
+        }
     }
 
     public function callback($req)
     {
         $this->req = $req;
-        try {
-            $this->processSuccess();
-        } catch (ErrorException | ClientException $e) {
-            $this->log($e, self::ERROR,$e);
+        // check if we actually have a payload.
+        if (!empty($this->req->body)) {
+            //Check the redis connection
+            $this->checkRedisConnection();
+            if (!$this->reschedule()) {
+                try {
+                    $this->processSuccess();
+                } catch (ErrorException | ClientException $e) {
+                    $this->log($e, self::ERROR, $e);
+                }
+            }
         }
         $this->req->delivery_info['channel']->basic_ack(
-            $this->req->delivery_info['delivery_tag']);
+            $this->req->delivery_info['delivery_tag']
+        );
     }
 
+    private function reschedule()
+    {
+        $messageObject = json_decode($this->req->body);
+        if (property_exists($messageObject, 'time')) {
+            $this->log('Rescheduling for ' . $messageObject->time);
+            $this->createSchedule($messageObject);
+            return true;
+        } elseif (property_exists($messageObject, '_schedule')) {
+            $this->log('Received message from Scheduler');
+            return false;
+        } else {
+            $this->log('Received message');
+            return false;
+        }
+    }
 
-    public function setConnected($connected) {
+    public function createSchedule($messageObject)
+    {
+        try {
+            $payload = $this->makeReschedulePayload($messageObject);
+            $response = $this->guzzle->request('POST', '/', ['json' => $payload]);
+            $contents = json_decode($response->getBody()->getContents());
+            $messageBody['schedule_id'] = $contents->result->uuid;
+            $this->redis->set($payload['data']['redis_id'], json_encode($payload['data']));
+            $this->schedulerConnected = true;
+            return $contents->result->uuid;
+        } catch (ClientException | ConnectException $e) {
+            $this->schedulerConnected = false;
+            $this->log($e->getMessage(), self::CRITICAL);
+            return false;
+        }
+    }
+
+    public function updateSchedule($messageObject)
+    {
+        $payload = $this->makeReschedulePayload($messageObject);
+        $this->guzzle->request('PUT', '/' . $messageObject->schedule_id, ['json' => $payload]);
+        $this->redis->set($messageObject->schedule_id, json_encode($payload['data']));
+    }
+
+    public function setConnected($connected)
+    {
         $this->connected = $connected;
     }
 
-    public function getConnectedStatus() {
+    public function getConnectedStatus()
+    {
         return $this->connected;
+    }
+
+    private function makeReschedulePayload($messageObject)
+    {
+        $messageBody = (array)$messageObject;
+        $time = $messageBody['time'];
+        unset($messageBody['time']);
+        $messageBody['redis_id'] = Uuid::uuid4()->toString();
+        $payload['time'] = $time;
+        if (array_key_exists('routing_key', $messageBody)) {
+            $payload['routing_key'] = $messageBody['routing_key'];
+            unset($messageBody['routing_key']);
+        } else {
+            $payload['routing_key'] = $this->routingKey;
+        }
+        $payload['data'] = $messageBody;
+        return $payload;
     }
 
     public function processFailure($exception)
@@ -366,59 +485,55 @@ abstract class Service implements rabbitInterface
             if ($this->connected) {
                 $this->sendMessage($exception->getMessage(), $this->errorExchange, $this->errorQueue);
                 $this->buildStackDriverError($exception);
-                if(!empty($this->req) && $this->req->has('reply_to')) {
+                if (!empty($this->req) && $this->req->has('reply_to')) {
                     $this->sendMessage($exception->getMessage(), $this->exchange, $this->req->get('reply_to'));
                 }
             }
+            if ($this->schedulerConnected) {
+                $this->rescheduleMessage();
+            }
         } catch (OutOfBoundsException $e) {
-
         }
     }
 
-    public function log($message, $level = self::INFO,$exception = null)
+    public function log($message, $level = self::INFO, $exception = null)
     {
         $time = Carbon::NOW()->tz('UTC');
         $array['stackdriver']['message'] = $message;
         if ($this->stdlogging) {
-            if (in_array($level, [self::INFO,self::DEBUG])) {
+            if (in_array($level, [self::INFO, self::DEBUG])) {
                 $handle = STDOUT;
             } else {
                 $handle = STDERR;
             }
             fwrite($handle, $time->format(self::timeFormat) . ' ' . $message . '.' . PHP_EOL);
         }
-
         $this->logToStackDriver($array, $level);
-
-        if (!in_array($level, [self::INFO,self::DEBUG]) && !empty($exception)) {
+        if (!in_array($level, [self::INFO, self::DEBUG]) && !empty($exception)) {
             $this->processFailure($exception);
         }
-
     }
 
     private function logToStackDriver($array, $level = 'INFO')
     {
-        $log = 'log.' . strtolower($level) . '.svc-' . $this->name;
-        $array['log'] = 'svc-' . $this->name;
-        $array['stackdriver']['serviceContext'] = [
-            'service' => 'svc-' . $this->name,
-            'version' => $this->version
-        ];
+        $log = 'log.' . strtolower($level) . '.' . $this->serviceLoggingName;
+        $array['log'] = $this->serviceLoggingName;
+        $array['stackdriver']['serviceContext'] = ['service' => $this->serviceLoggingName, 'version' => $this->version];
         return $this->sendMessage($array, $this->exchange, $log);
     }
 
     public function sendMessage($array, $exchange, $routingKey)
     {
         if ($this->connected) {
-            $msg = new AMQPMessage(
-                (string)json_encode($array),
-                array('correlation_id' => Uuid::uuid4()->toString())
-            );
-            $this->channel->basic_publish(
-                $msg, $exchange, $routingKey);
+            $msg = new AMQPMessage((string)json_encode($array), array('correlation_id' => Uuid::uuid4()->toString()));
+            $this->channel->basic_publish($msg, $exchange, $routingKey);
+        } elseif ($this->schedulerConnected) {// Since we're not connected to rabbit. Let's send it the scheduler.
+            $array['time'] = Carbon::NOW()->addSeconds($this->reconnect_timeout)->timestamp;
+            $array['routing_key'] = $routingKey;
+            $this->createSchedule($array);
         } else { // We're not connected to either the scheduler or rabbit? Need to report to STDERR
             $time = Carbon::NOW();
-            fwrite(STDERR, $time->format(self::timeFormat) . ' Rabbit unavailable.' . PHP_EOL);
+            fwrite(STDERR, $time->format(self::timeFormat) . ' Rabbit and scheduler unavailable.' . PHP_EOL);
             fwrite(STDERR, $time->format(self::timeFormat) . ' ' . $array['stackdriver']['message'] . PHP_EOL);
         }
     }
@@ -490,10 +605,30 @@ abstract class Service implements rabbitInterface
             mysqli_ping($this->conn);
         } catch (ErrorException | msqli_error_exception $e) {
             $this->log($e->getMessage(), self::CRITICAL, $e);
-            exit;
+            $this->log("Mysql disconnected. Trying to reconnect");
+            return false;
         }
     }
-    protected function getMessageRoutingKey() {
+
+    public function rescheduleMessage($time = null, $routingKey = null)
+    {
+        if (!empty($this->req)) {
+            if (is_null($time)) {
+                $time = Carbon::NOW()->addSeconds($this->reconnect_timeout)->timestamp;
+            }
+            if (is_null($routingKey)) {
+                $routingKey = $this->routingKey;
+            }
+            $messageBody = json_decode($this->req->body, true);
+            $messageBody['time'] = $time;
+            $messageBody['routing_key'] = $routingKey;
+            $this->req->body = json_encode($messageBody);
+            $this->reschedule();
+        }
+    }
+
+    protected function getMessageRoutingKey()
+    {
         $key = null;
         if (!empty($this->req)) {
             $key = $this->req->delivery_info['routing_key'];
@@ -501,34 +636,37 @@ abstract class Service implements rabbitInterface
         return $key;
     }
 
-    public function runService() {
-        while(true) {
+    public function runService()
+    {
+        while (true) {
             try {
                 $this->connect();
-                $this->setExchange(getenv('RMQ_EXCHANGE'));
+                if (empty($this->exchange)) {
+                    $this->setExchange(getenv('RMQ_EXCHANGE'));
+                }
                 if (empty($this->queue)) {
-                    throw new \MyDoc\Exception('No Queue has been set. Did you run $service->setQueue($queue) ?');
+                    throw new Exception('No Queue has been set. Did you run $service->setQueue($queue) ?');
                 }
                 if (empty($this->routingKey)) {
-                    throw new \MyDoc\Exception('No Binding key been set. Did you run $service->bindQueue($routing_key) ?');
+                    throw new Exception('No Binding key been set. Did you run $service->bindQueue($routing_key) ?');
                 }
-
                 $this->consume();
-
                 while (count($this->channel->callbacks)) {
                     $this->channel->wait();
                 }
             } catch (ErrorException $e) {
                 $this->log($e->getMessage(), self::CRITICAL);
-                $this->log('Reconnecting in ' . filter_var(getenv('RMQ_RECONNECT_TIMEOUT'),
-                        FILTER_VALIDATE_INT) . ' seconds');
+                $this->log('Reconnecting in ' . filter_var(
+                    getenv('RMQ_RECONNECT_TIMEOUT'),
+                    FILTER_VALIDATE_INT
+                ) . ' seconds');
                 $this->reconnect();
             } catch (AMQPTimeoutException | AMQPIOException | AMQPRuntimeException $e) {
                 $this->setConnected(false);
-                $this->log('Rabbit Timeout ' . $e->getMessage(),self::CRITICAL);
-            } catch (\MyDoc\Exception  | AMQPProtocolChannelException $e) {
+                $this->log('Rabbit Timeout ' . $e->getMessage(), self::CRITICAL);
+            } catch (Exception  | AMQPProtocolChannelException $e) {
                 $this->setConnected(false);
-                $this->log($e->getMessage(),self::CRITICAL, $e);
+                $this->log($e->getMessage(), self::CRITICAL, $e);
                 exit;
             }
         }
