@@ -1,0 +1,24 @@
+os: linux
+env:
+  - CODACY_PROJECT_TOKEN=1f6ec475dc3a4d74be760ea3f23f2ee6
+dist: trusty
+sudo: required
+language: php
+php:
+  - '7.2'
+before_script:
+  - phpenv config-rm xdebug.ini
+script:
+  - phpdbg -qrr vendor/bin/phpunit
+services:
+  - rabbitmq
+  - redis-server
+cache:
+  directories:
+    - vendor
+before_install:
+  - sudo apt-get -qq update
+  - composer self-update
+  - composer install --no-interaction
+after_script:
+  - php vendor/bin/codacycoverage clover build/logs/clover.xml
