@@ -22,7 +22,7 @@ In your own project's composer.json you should add the following code.
 Once you've added the above code to your composer.json you can install the core service. 
 
 ```
-composer require datanoodle-com/dn-service-core
+composer require datanoodle/dn-service-core
 ```
 
 This core service provides the base funcationality for
