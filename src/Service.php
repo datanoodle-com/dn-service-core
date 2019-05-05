@@ -59,7 +59,6 @@ abstract class Service implements rabbitInterface
     protected $errorBindingKey;
     protected $reconnect_timeout;
     protected $serviceLoggingName;
-    protected $schedulerConnected;
 
     const INFO = "INFO";
     const DEBUG = "DEBUG";
@@ -126,25 +125,17 @@ abstract class Service implements rabbitInterface
                 'RMQ_USER',
                 'RMQ_PASSWORD',
                 'RMQ_VHOST',
-                'SCHEDULER_HOST'
             ])->notEmpty();
             $this->dotenv->required('RMQ_SSL')->isBoolean();
             $this->dotenv->required('RMQ_PORT')->isInteger();
             $this->dotenv->required('RMQ_RECONNECT_TIMEOUT')->isInteger();
             $this->dotenv->required('STD_LOGGING')->isBoolean();
             $this->dotenv->load();
-            $this->setScheduler();
             return true;
         } catch (\RuntimeException $e) {
             $this->log($e->getMessage(), self::ERROR);
             exit;
         }
-    }
-
-    private function setScheduler()
-    {
-        $this->guzzle = new Guzzle(['base_uri' => getenv('SCHEDULER_HOST')]);
-        $this->schedulerConnected = true;
     }
 
     private function setStdLogging()
@@ -432,24 +423,12 @@ abstract class Service implements rabbitInterface
     {
         try {
             $payload = $this->makeReschedulePayload($messageObject);
-            $response = $this->guzzle->request('POST', '/', ['json' => $payload]);
-            $contents = json_decode($response->getBody()->getContents());
-            $messageBody['schedule_id'] = $contents->result->uuid;
-            $this->redis->set($payload['data']['redis_id'], json_encode($payload['data']));
-            $this->schedulerConnected = true;
-            return $contents->result->uuid;
+            $this->sendMessage($payload, 'svc.data', 'scheduler.save');
+            return $messageObject['correlation_id'];
         } catch (ClientException | ConnectException $e) {
-            $this->schedulerConnected = false;
             $this->log($e->getMessage(), self::CRITICAL);
             return false;
         }
-    }
-
-    public function updateSchedule($messageObject)
-    {
-        $payload = $this->makeReschedulePayload($messageObject);
-        $this->guzzle->request('PUT', '/' . $messageObject->schedule_id, ['json' => $payload]);
-        $this->redis->set($messageObject->schedule_id, json_encode($payload['data']));
     }
 
     public function setConnected($connected)
@@ -467,7 +446,6 @@ abstract class Service implements rabbitInterface
         $messageBody = (array)$messageObject;
         $time = $messageBody['time'];
         unset($messageBody['time']);
-        $messageBody['redis_id'] = Uuid::uuid4()->toString();
         $payload['time'] = $time;
         if (array_key_exists('routing_key', $messageBody)) {
             $payload['routing_key'] = $messageBody['routing_key'];
@@ -489,9 +467,7 @@ abstract class Service implements rabbitInterface
                     $this->sendMessage($exception->getMessage(), $this->exchange, $this->req->get('reply_to'));
                 }
             }
-            if ($this->schedulerConnected) {
-                $this->rescheduleMessage();
-            }
+	    $this->rescheduleMessage();
         } catch (OutOfBoundsException $e) {
         }
     }
@@ -527,14 +503,10 @@ abstract class Service implements rabbitInterface
         if ($this->connected) {
             $msg = new AMQPMessage((string)json_encode($array), array('correlation_id' => Uuid::uuid4()->toString()));
             $this->channel->basic_publish($msg, $exchange, $routingKey);
-        } elseif ($this->schedulerConnected) {// Since we're not connected to rabbit. Let's send it the scheduler.
+        } else {
             $array['time'] = Carbon::NOW()->addSeconds($this->reconnect_timeout)->timestamp;
             $array['routing_key'] = $routingKey;
             $this->createSchedule($array);
-        } else { // We're not connected to either the scheduler or rabbit? Need to report to STDERR
-            $time = Carbon::NOW();
-            fwrite(STDERR, $time->format(self::timeFormat) . ' Rabbit and scheduler unavailable.' . PHP_EOL);
-            fwrite(STDERR, $time->format(self::timeFormat) . ' ' . $array['stackdriver']['message'] . PHP_EOL);
         }
     }
 
