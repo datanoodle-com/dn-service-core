@@ -467,7 +467,7 @@ abstract class Service implements rabbitInterface
                     $this->sendMessage($exception->getMessage(), $this->exchange, $this->req->get('reply_to'));
                 }
             }
-	    $this->rescheduleMessage();
+            $this->rescheduleMessage();
         } catch (OutOfBoundsException $e) {
         }
     }
@@ -484,7 +484,9 @@ abstract class Service implements rabbitInterface
             }
             fwrite($handle, $time->format(self::timeFormat) . ' ' . $message . '.' . PHP_EOL);
         }
-        $this->logToStackDriver($array, $level);
+        if ($this->connected) {
+            $this->logToStackDriver($array, $level);
+        }
         if (!in_array($level, [self::INFO, self::DEBUG]) && !empty($exception)) {
             $this->processFailure($exception);
         }
