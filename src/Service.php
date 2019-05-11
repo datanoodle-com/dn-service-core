@@ -424,7 +424,6 @@ abstract class Service implements rabbitInterface
         try {
             $payload = $this->makeReschedulePayload($messageObject);
             $this->sendMessage($payload, 'svc.data', 'scheduler.save');
-            return $messageObject->correlation_id;
         } catch (ClientException | ConnectException $e) {
             $this->log($e->getMessage(), self::CRITICAL);
             return false;
