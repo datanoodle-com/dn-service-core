@@ -2,12 +2,12 @@
   "name": "datanoodle/dn-service-core",
   "description": "This is the base php service that has all the major functionality used by the child services",
   "require": {
-    "guzzlehttp/guzzle": "^6.3",
-    "php-amqplib/php-amqplib": "^2.7",
-    "nesbot/carbon": "^1.22",
+    "guzzlehttp/guzzle": "^6.5",
+    "php-amqplib/php-amqplib": "^2.11",
+    "nesbot/carbon": "^2.28",
     "predis/predis": "^1.1",
-    "ramsey/uuid": "^3.8",
-    "vlucas/phpdotenv": "^2.5",
+    "ramsey/uuid": "^3.9",
+    "vlucas/phpdotenv": "^4.1",
     "ext-json": "*",
     "ext-mysqli": "*"
   },
@@ -23,8 +23,8 @@
     }
   },
   "require-dev": {
-    "fzaninotto/faker": "^1.8",
-    "phpunit/phpunit": "^8.0",
+    "fzaninotto/faker": "^1.9",
+    "phpunit/phpunit": "^8.5",
     "codacy/coverage": "^1.4"
   }
 }

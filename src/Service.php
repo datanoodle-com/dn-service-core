@@ -110,29 +110,48 @@ abstract class Service implements rabbitInterface
 
     private function getEnvVariables()
     {
+
         $this->rootdir = dirname(__DIR__, 4) . '/';
+
+        if (!file_exists($this->rootdir . '.env')) {
+            $this->rootdir = dirname(__DIR__) . '/';
+        }
         try {
             $this->log('Loading environment variables', self::DEBUG);
-            $this->dotenv = new Dotenv($this->rootdir);
-            $this->dotenv->load();
-            if (!isset($_ENV['RMQ_HOST'])) { // checks a variable that should be loaded
-                $this->log('Failed loading the environment variables', self::ERROR);
-                return $this->getEnvVariables(); // if not set, retry ad infinitum
+            $this->dotenv = Dotenv::create($this->rootdir);
+            try {
+                $this->dotenv->load();
+            } catch (InvalidPathException $e) {
+                $this->log('Couldn\'t find the env, check for the current directory', self::ERROR);
+                $this->rootdir = dirname(__DIR__) . '/';
+                $this->dotenv = new Dotenv($this->rootdir);
+                $this->dotenv->load();
+                $this->log('loaded the env file locally');
             }
+
             $this->log('Successfully loaded the environment variables', self::DEBUG);
             $this->dotenv->required([
                 'RMQ_HOST',
                 'RMQ_USER',
                 'RMQ_PASSWORD',
                 'RMQ_VHOST',
+            'SCHEDULER_HOST'
             ])->notEmpty();
+
+            if (!empty(getenv('API_HOST'))) {
+                $this->dotenv->required([
+                    'API_CLIENT_ID',
+                    'API_CLIENT_SECRET'
+                ])->notEmpty();
+            }
             $this->dotenv->required('RMQ_SSL')->isBoolean();
             $this->dotenv->required('RMQ_PORT')->isInteger();
             $this->dotenv->required('RMQ_RECONNECT_TIMEOUT')->isInteger();
             $this->dotenv->required('STD_LOGGING')->isBoolean();
             $this->dotenv->load();
+            $this->setScheduler();
             return true;
-        } catch (\RuntimeException $e) {
+        } catch (RuntimeException $e) {
             $this->log($e->getMessage(), self::ERROR);
             exit;
         }
