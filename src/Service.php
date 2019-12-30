@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use ErrorException;
 use Ramsey\Uuid\Uuid;
 use Predis\Client as Redis;
+use GuzzleHttp\Client as Guzzle;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Exception\AMQPIOException;
 use GuzzleHttp\Exception\ClientException;
