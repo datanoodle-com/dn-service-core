@@ -7,7 +7,6 @@ use Carbon\Carbon;
 use ErrorException;
 use Ramsey\Uuid\Uuid;
 use Predis\Client as Redis;
-use GuzzleHttp\Client as Guzzle;
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Exception\AMQPIOException;
 use GuzzleHttp\Exception\ClientException;
@@ -116,9 +115,10 @@ abstract class Service implements rabbitInterface
         if (!file_exists($this->rootdir . '.env')) {
             $this->rootdir = dirname(__DIR__) . '/';
         }
+
         try {
             $this->log('Loading environment variables', self::DEBUG);
-            $this->dotenv = Dotenv::create($this->rootdir);
+            $this->dotenv = Dotenv::createMutable($this->rootdir);
             try {
                 $this->dotenv->load();
             } catch (InvalidPathException $e) {
@@ -151,9 +151,22 @@ abstract class Service implements rabbitInterface
             $this->dotenv->load();
             $this->setScheduler();
             return true;
-        } catch (RuntimeException $e) {
+        } catch (\RuntimeException $e) {
+            exit($e->getMessage());
             $this->log($e->getMessage(), self::ERROR);
-            exit;
+            return false;
+        }
+    }
+
+    private function setScheduler()
+    {
+        if (filter_var(getenv('SCHEDULER_HOST'), FILTER_VALIDATE_URL)) {
+            $this->guzzle = new Guzzle(['base_uri' => getenv('SCHEDULER_HOST')]);
+            $this->scheduler = true;
+            $this->schedulerConnected = true;
+        } else {
+            $this->scheduler = false;
+            $this->schedulerConnected = false;
         }
     }
 
