@@ -13,17 +13,17 @@ In your own project's composer.json you should add the following code.
 "repositories": [
        {
          "type": "vcs",
-         "url": "git@github.com:datanoodle-com/dn-service-core.git",
+         "url": "https://github.com/datanoodle-com/dn-service-core.git",
          "no-api": true
        }
      ]
 ```
 
-Once you've added the above code to your composer.json you can install the core service. 
+Once you've added the above code to your composer.json you can install the core service.
 
-```
+`
 composer require datanoodle/dn-service-core
-```
+`
 
 This core service provides the base funcationality for
 
@@ -41,21 +41,20 @@ Any messages that are received by the core service will be stored in the '$this-
 
 ## Environment variables
 
-This service relies heavily on .env file for configuration. 
+This service relies heavily on .env file for configuration.
 
 The sample .env file provided lists all the flags required by the core service.
 
-You can add your own parameters to the .env as required for your own services. 
+You can add your own parameters to the .env as required for your own services.
 
 ## Logging
 
 You can toggle logging to STDOUT by setting the STD_LOGGING flag in the .env file.
 
-e.g. 
+e.g.
 ```
 STD_LOGGING=false # Will log only to stackdriver
-```
-```
+
 STD_LOGGING=true # Will log to both stackdriver and to STDOUT
 ```
 
@@ -67,7 +66,7 @@ This function takes 2 parameters
 * Message (required) The message to log.
 * Level (optional) The level of the message. The default level if no level is provided is INFO (See Service.php for the full list of accepted log levels).
 
-e.g. 
+e.g.
 
 ```
 $this->log('This is a normal info log');
@@ -76,10 +75,10 @@ $this->log(('Explicitly set an info level', Service::INFO);
 $this->log('A Debug message', self::DEBUG');
 ```
 
-e.g. 
+##Sample
 
-`TutorialService.php`
-```
+###TutorialService.php
+``````
 <?php
 
 require_once __DIR__ . '/vendor/autoload.php';
@@ -108,4 +107,4 @@ $tutorialService->bindQueue('routing_key.2');
 $tutorialService->bindQueue('another,key');
 // Finally run the service.
 $tutorialService->runService();
-```
+``````
