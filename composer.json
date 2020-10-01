@@ -44,6 +44,6 @@
     "ramsey/uuid": "^4.1",
     "nesbot/carbon": "^2.40",
     "php-amqplib/php-amqplib": "^2.12",
-    "guzzlehttp/guzzle": "^7.1"
+    "guzzlehttp/guzzle": "^7.1 || ^6.0"
   }
 }
