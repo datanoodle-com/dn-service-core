@@ -1,49 +1,12 @@
 <?php
 
+namespace DataNoodle\Tests\unit;
+
+use stdClass;
+use Faker\Factory;
+use ReflectionClass;
+use ArgumentCountError;
 use PHPUnit\Framework\TestCase;
-
-class AbstractService extends DataNoodle\Service
-{
-
-    public function processSuccess()
-    {
-    }
-
-    public function setHost()
-    {
-        $this->host = 'localhost';
-    }
-
-    public function setPort()
-    {
-        $this->port = '5672';
-    }
-
-    public function setUser()
-    {
-        $this->user = 'guest';
-    }
-
-    public function setPass()
-    {
-        $this->pass = 'guest';
-    }
-
-    public function getExchange()
-    {
-        return $this->exchange;
-    }
-
-    public function setExchange($exchange, $topic = 'topic', $passive = false, $durable = true, $auto_delete = false)
-    {
-        $this->exchange = $exchange;
-    }
-
-    public function getQueue()
-    {
-        return $this->queue;
-    }
-}
 
 class ServiceCoreTest extends TestCase
 {
@@ -53,7 +16,7 @@ class ServiceCoreTest extends TestCase
     {
         parent::__construct($name, $data, $dataName);
 
-        $this->faker = Faker\Factory::create();
+        $this->faker = Factory::create();
     }
 
     public function testcreateAbstractClassWithoutName()
@@ -84,9 +47,8 @@ class ServiceCoreTest extends TestCase
     {
         $exchange = $this->faker->company;
 
-        $test = $this->getMockBuilder('AbstractService')->setMethods([
-            '__construct',
-            'getEnvVariables',
+        $test = $this->getMockBuilder(AbstractService::class)->setMethodsExcept([
+            'getExchange'
         ])->setConstructorArgs([$exchange])->disableOriginalConstructor()->getMock();
 
         $this->setProtectedProperty($test, 'exchange', $exchange);
@@ -99,14 +61,45 @@ class ServiceCoreTest extends TestCase
         $name = $this->faker->company;
         $queue = $this->faker->jobTitle;
 
-        $test = $this->getMockBuilder('AbstractService')->setMethods([
-            '__construct',
-            'getEnvVariables',
-        ])->setConstructorArgs([$name])->disableOriginalConstructor()->getMock();
+        $test = $this->getMockBuilder(AbstractService::class)->setMethodsExcept(['getQueue'])
+            ->disableOriginalConstructor()->getMock();
 
         $this->setProtectedProperty($test, 'queue', $queue);
 
         $this->assertEquals($queue, $test->getQueue());
+    }
+
+    public function testSetName()
+    {
+        $name = $this->faker->company;
+
+        $test = $this->getMockBuilder(AbstractService::class)->setMethodsExcept([
+            'getName',
+            'setName',
+        ])->setConstructorArgs([$name])->disableOriginalConstructor()->getMock();
+
+        $test->setName($name);
+
+        $this->assertEquals($name, $test->getName());
+    }
+
+    public function testGetMessageObject()
+    {
+        $name = $this->faker->company;
+
+        $test = $this->getMockBuilder(AbstractService::class)->setMethodsExcept([
+            'getMessageObject'
+        ])->setConstructorArgs([$name])->disableOriginalConstructor()->getMock();
+
+        $this->setProtectedProperty($test, 'req', $this->buildMessagePayload());
+
+        $messageObject = $test->getMessageObject(true);
+
+        $this->assertIsArray($messageObject);
+
+        $messageObject = $test->getMessageObject(false);
+
+        $this->assertIsObject($messageObject);
     }
 
     public function setProtectedProperty($object, $property, $value)
@@ -115,5 +108,18 @@ class ServiceCoreTest extends TestCase
         $reflection_property = $reflection->getProperty($property);
         $reflection_property->setAccessible(true);
         $reflection_property->setValue($object, $value);
+    }
+
+    private function buildMessagePayload()
+    {
+        $object = new StdClass;
+
+        $array['first_name'] = $this->faker->firstName;
+        $array['last_name'] = $this->faker->lastName;
+        $array['email'] = $this->faker->email;
+
+        $object->body = json_encode($array);
+
+        return $object;
     }
 }

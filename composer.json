@@ -1,15 +1,12 @@
 {
-  "name": "datanoodle/dn-service-core",
+  "name": "datanoodle/php-service-core",
   "description": "This is the base php service that has all the major functionality used by the child services",
-  "require": {
-    "guzzlehttp/guzzle": "^6.5",
-    "php-amqplib/php-amqplib": "^2.11",
-    "nesbot/carbon": "^2.28",
-    "predis/predis": "^1.1",
-    "ramsey/uuid": "^3.9",
-    "vlucas/phpdotenv": "^4.1",
-    "ext-json": "*",
-    "ext-mysqli": "*"
+  "license": "proprietary",
+  "minimum-stability": "stable",
+  "config": {
+    "platform": {
+      "php": "7.3"
+    }
   },
   "authors": [
     {
@@ -17,14 +14,36 @@
       "email": "aris.abramian@datanoodle.com"
     }
   ],
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "git@github.com:datanoodle-com/phpcs-git-pre-commit.git",
+      "no-api": true
+    }
+  ],
   "autoload": {
     "psr-4": {
       "DataNoodle\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "DataNoodle\\Tests\\": "tests/"
+    }
+  },
   "require-dev": {
+    "roave/security-advisories": "dev-master",
+    "datanoodle/phpcs-git-pre-commit": "^1.0",
+    "squizlabs/php_codesniffer": "^3.5",
     "fzaninotto/faker": "^1.9",
-    "phpunit/phpunit": "^8.5",
-    "codacy/coverage": "^1.4"
+    "codacy/coverage": "^1.4",
+    "phpunit/phpunit": "^9.3"
+  },
+  "require": {
+    "vlucas/phpdotenv": "^5.2",
+    "ramsey/uuid": "^4.1",
+    "nesbot/carbon": "^2.40",
+    "php-amqplib/php-amqplib": "^2.12",
+    "guzzlehttp/guzzle": "^7.1"
   }
 }
