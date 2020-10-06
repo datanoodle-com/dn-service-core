@@ -269,7 +269,7 @@ abstract class Service implements RabbitInterface
                 'SCHEDULER_HOST'
             ])->notEmpty();
 
-            if (!empty(getenv('API_HOST'))) {
+            if (!empty($_ENV['API_HOST'])) {
                 $this->dotenv->required([
                     'API_CLIENT_ID',
                     'API_CLIENT_SECRET'
@@ -290,8 +290,8 @@ abstract class Service implements RabbitInterface
 
     private function setScheduler()
     {
-        if (filter_var(getenv('SCHEDULER_HOST'), FILTER_VALIDATE_URL)) {
-            $this->guzzle = new Guzzle(['base_uri' => getenv('SCHEDULER_HOST')]);
+        if (filter_var($_ENV['SCHEDULER_HOST'], FILTER_VALIDATE_URL)) {
+            $this->guzzle = new Guzzle(['base_uri' => $_ENV['SCHEDULER_HOST']]);
             $this->scheduler = true;
             $this->schedulerConnected = true;
         } else {
@@ -302,17 +302,17 @@ abstract class Service implements RabbitInterface
 
     private function setApiClient()
     {
-        if (!empty(getenv('API_HOST'))) {
+        if (!empty($_ENV['API_HOST'])) {
             $this->api = new Guzzle([
-                'base_uri' => getenv('API_HOST'),
-                'headers' => ['client-id' => getenv('API_CLIENT_ID'), 'client-secret' => getenv('API_CLIENT_SECRET')]
+                'base_uri' => $_ENV['API_HOST'],
+                'headers' => ['client-id' => $_ENV['API_CLIENT_ID'), 'client-secret' => getenv('API_CLIENT_SECRET']]
             ]);
         }
     }
 
     private function setStdLogging()
     {
-        $this->stdlogging = filter_var(getenv('STD_LOGGING'), FILTER_VALIDATE_BOOLEAN);
+        $this->stdlogging = filter_var($_ENV['STD_LOGGING'], FILTER_VALIDATE_BOOLEAN);
     }
 
     public function connect()
@@ -374,16 +374,16 @@ abstract class Service implements RabbitInterface
         $this->dotenv->required('DB_SSL')->isBoolean();
         $this->dotenv->required('DB_PORT')->isInteger();
         $this->setSQL(true);
-        $this->dbhost = getenv('DB_HOST');
-        $this->dbport = getenv('DB_PORT');
-        $this->dbuser = getenv('DB_USERNAME');
-        $this->dbname = getenv('DB_DATABASE');
-        $this->dbpassword = getenv('DB_PASSWORD');
+        $this->dbhost = $_ENV['DB_HOST'];
+        $this->dbport = $_ENV['DB_PORT'];
+        $this->dbuser = $_ENV['DB_USERNAME'];
+        $this->dbname = $_ENV['DB_DATABASE'];
+        $this->dbpassword = $_ENV['DB_PASSWORD'];
         $string = 'pgsql:host=' . $this->dbhost . ';port=' . $this->dbport . ';dbname=' . $this->dbname . ';user=' . $this->dbuser . ';password=' . $this->dbpassword . ';sslmode=';
 
-        if (filter_var(getenv('DB_SSL'), FILTER_VALIDATE_BOOLEAN)) {
+        if (filter_var($_ENV['DB_SSL'], FILTER_VALIDATE_BOOLEAN)) {
             $sslmode = 'verify-full';
-            $sslString = $sslmode . ';sslrootcert=' . getenv('DB_SSL_ROOTCERT') . ';sslkey=' . getenv('DB_SSL_KEY') . ';sslcert=' . getenv('DB_SSL_CERT');
+            $sslString = $sslmode . ';sslrootcert=' . $_ENV['DB_SSL_ROOTCERT') . ';sslkey=' . getenv('DB_SSL_KEY') . ';sslcert=' . getenv('DB_SSL_CERT'];
         } else {
             $sslmode = 'disable';
             $sslString = 'disable';
@@ -393,18 +393,18 @@ abstract class Service implements RabbitInterface
 
     public function setUser()
     {
-        $this->user = getenv('RMQ_USER');
+        $this->user = $_ENV['RMQ_USER'];
     }
 
     public function setPass()
     {
-        $this->pass = getenv('RMQ_PASSWORD');
+        $this->pass = $_ENV['RMQ_PASSWORD'];
     }
 
     public function setSSL($ssl = null)
     {
         if (empty($ssl)) {
-            $this->ssl = filter_var(getenv('RMQ_SSL'), FILTER_VALIDATE_BOOLEAN);
+            $this->ssl = filter_var($_ENV['RMQ_SSL'], FILTER_VALIDATE_BOOLEAN);
         } else {
             $this->ssl = $ssl;
         }
@@ -412,7 +412,7 @@ abstract class Service implements RabbitInterface
 
     public function setPeerName()
     {
-        $peername = getenv('RMQ_PEERNAME');
+        $peername = $_ENV['RMQ_PEERNAME'];
         if (empty($peername)) {
             $peername = gethostname();
         }
@@ -421,12 +421,12 @@ abstract class Service implements RabbitInterface
 
     public function setPort()
     {
-        $this->port = getenv('RMQ_PORT');
+        $this->port = $_ENV['RMQ_PORT'];
     }
 
     public function setHost()
     {
-        $this->host = getenv('RMQ_HOST');
+        $this->host = $_ENV['RMQ_HOST'];
     }
 
     public function setName($name)
@@ -443,12 +443,12 @@ abstract class Service implements RabbitInterface
 
     public function setVHost()
     {
-        $this->vhost = getenv('RMQ_VHOST');
+        $this->vhost = $_ENV['RMQ_VHOST'];
     }
 
     public function setReconnectTimeout()
     {
-        $this->reconnect_timeout = getenv('RMQ_RECONNECT_TIMEOUT');
+        $this->reconnect_timeout = $_ENV['RMQ_RECONNECT_TIMEOUT'];
     }
 
     protected function setErrorExchange($exchange)
@@ -799,7 +799,7 @@ abstract class Service implements RabbitInterface
             try {
                 $this->connect();
                 if (empty($this->exchange)) {
-                    $this->setExchange(getenv('RMQ_EXCHANGE'));
+                    $this->setExchange($_ENV['RMQ_EXCHANGE']);
                 }
                 if (empty($this->queue)) {
                     throw new Exception('No Queue has been set. Did you run $service->setQueue($queue) ?');
@@ -815,7 +815,7 @@ abstract class Service implements RabbitInterface
                 $this->log($e->getFile() . ": " . $e->getLine(), self::CRITICAL);
                 $this->log($e->getMessage(), self::CRITICAL);
                 $this->log('Reconnecting in ' . filter_var(
-                    getenv('RMQ_RECONNECT_TIMEOUT'),
+                    $_ENV['RMQ_RECONNECT_TIMEOUT'],
                     FILTER_VALIDATE_INT
                 ) . ' seconds');
                 $this->reconnect();
