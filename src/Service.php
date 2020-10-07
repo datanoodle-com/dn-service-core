@@ -305,7 +305,7 @@ abstract class Service implements RabbitInterface
         if (!empty($_ENV['API_HOST'])) {
             $this->api = new Guzzle([
                 'base_uri' => $_ENV['API_HOST'],
-                'headers' => ['client-id' => $_ENV['API_CLIENT_ID'), 'client-secret' => getenv('API_CLIENT_SECRET']]
+                'headers' => ['client-id' => $_ENV['API_CLIENT_ID'], 'client-secret' => $_ENV['API_CLIENT_SECRET']]
             ]);
         }
     }
@@ -383,7 +383,7 @@ abstract class Service implements RabbitInterface
 
         if (filter_var($_ENV['DB_SSL'], FILTER_VALIDATE_BOOLEAN)) {
             $sslmode = 'verify-full';
-            $sslString = $sslmode . ';sslrootcert=' . $_ENV['DB_SSL_ROOTCERT') . ';sslkey=' . getenv('DB_SSL_KEY') . ';sslcert=' . getenv('DB_SSL_CERT'];
+            $sslString = $sslmode . ';sslrootcert=' . $_ENV['DB_SSL_ROOTCERT'] . ';sslkey=' . $_ENV['DB_SSL_KEY'] . ';sslcert=' . $_ENV['DB_SSL_CERT'];
         } else {
             $sslmode = 'disable';
             $sslString = 'disable';
@@ -433,7 +433,7 @@ abstract class Service implements RabbitInterface
     {
         $this->name = $name;
 
-        $this->serviceLoggingName = getenv("LOGGING_NAME") ?: 'svc-' . $this->name;
+        $this->serviceLoggingName = $_ENV["LOGGING_NAME"] ?: 'svc-' . $this->name;
     }
 
     public function getName()
