@@ -6,6 +6,7 @@ use PDO;
 use Dotenv\Dotenv;
 use Carbon\Carbon;
 use ErrorException;
+use PhpAmqpLib\Exception\AMQPBasicCancelException;
 use Ramsey\Uuid\Uuid;
 use GuzzleHttp\Client as Guzzle;
 use PhpAmqpLib\Channel\AMQPChannel;
@@ -573,25 +574,26 @@ abstract class Service implements RabbitInterface
                 }
             }
         }
-        $this->req->delivery_info['channel']->basic_ack(
-            $this->req->delivery_info['delivery_tag']
-        );
+        $this->req->getChannel()->basic_ack($this->req->getDeliveryTag());
     }
 
     private function reschedule()
     {
         $messageObject = $this->getMessageObject(false);
-        if (property_exists($messageObject, 'time')) {
-            $this->log('Rescheduling for ' . $messageObject->time);
-            $this->createSchedule($messageObject);
-            return true;
-        } elseif (property_exists($messageObject, '_schedule')) {
-            $this->log('Received message from Scheduler');
-            return false;
-        } else {
-            $this->log('Received message');
-            return false;
+        if ($messageObject !== null) {
+            if (property_exists($messageObject, 'time')) {
+                $this->log('Rescheduling for ' . $messageObject->time);
+                $this->createSchedule($messageObject);
+                return true;
+            } elseif (property_exists($messageObject, '_schedule')) {
+                $this->log('Received message from Scheduler');
+                return false;
+            } else {
+                $this->log('Received message');
+                return false;
+            }
         }
+        return false;
     }
 
     public function createSchedule($messageObject)
@@ -807,6 +809,8 @@ abstract class Service implements RabbitInterface
                 if (empty($this->routingKey)) {
                     throw new Exception('No Binding key been set. Did you run $service->bindQueue($routing_key) ?');
                 }
+                $this->setQueue($this->queue);
+                $this->bindQueue($this->routingKey);
                 $this->consume();
                 while (count($this->channel->callbacks)) {
                     $this->channel->wait();
@@ -814,14 +818,11 @@ abstract class Service implements RabbitInterface
             } catch (ErrorException $e) {
                 $this->log($e->getFile() . ": " . $e->getLine(), self::CRITICAL);
                 $this->log($e->getMessage(), self::CRITICAL);
-                $this->log('Reconnecting in ' . filter_var(
-                    $_ENV['RMQ_RECONNECT_TIMEOUT'],
-                    FILTER_VALIDATE_INT
-                ) . ' seconds');
                 $this->reconnect();
-            } catch (AMQPTimeoutException | AMQPIOException | AMQPRuntimeException $e) {
+            } catch (AMQPBasicCancelException | AMQPAMQPTimeoutException | AMQPIOException | AMQPRuntimeException $e) {
                 $this->setConnected(false);
                 $this->log('Rabbit Timeout ' . $e->getMessage(), self::CRITICAL);
+                $this->reconnect();
             } catch (Exception  | AMQPProtocolChannelException $e) {
                 $this->setConnected(false);
                 $this->log($e->getFile() . ": " . $e->getLine(), self::CRITICAL);
