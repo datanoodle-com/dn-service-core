@@ -690,7 +690,10 @@ abstract class Service implements RabbitInterface
     public function sendMessage($array, $exchange, $routingKey)
     {
         if ($this->connected) {
-            $msg = new AMQPMessage((string)json_encode($array), array('correlation_id' => Uuid::uuid4()->toString()));
+            $msg = new AMQPMessage((string)json_encode($array), array(
+                'delivery_mode' => AMQPMessage::DELIVERY_MODE_NON_PERSISTENT,
+                'correlation_id' => Uuid::uuid4()->toString()
+            ));
             $this->channel->basic_publish($msg, $exchange, $routingKey);
         } elseif ($this->schedulerConnected) {// Since we're not connected to rabbit. Let's send it the scheduler.
             $array['time'] = Carbon::NOW()->addSeconds($this->reconnect_timeout)->timestamp;
