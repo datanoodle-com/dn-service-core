@@ -321,6 +321,7 @@ abstract class Service implements RabbitInterface
         if (!$this->connected) {
             try {
                 if ($this->ssl) {
+                    AMQPSSLConnection::$LIBRARY_PROPERTIES['connection_name'] = ['S', $this->name];
                     $this->connection = new AMQPSSLConnection(
                         $this->host,
                         $this->port,
@@ -331,6 +332,7 @@ abstract class Service implements RabbitInterface
                         ['heartbeat' => 30, 'read_write_timeout' => 60]
                     );
                 } else {
+                    AMQPStreamConnection::$LIBRARY_PROPERTIES['connection_name'] = ['S', $this->name];
                     $this->connection = new AMQPStreamConnection(
                         $this->host,
                         $this->port,
@@ -826,7 +828,7 @@ abstract class Service implements RabbitInterface
                 $this->setConnected(false);
                 $this->log('Rabbit Timeout ' . $e->getMessage(), self::CRITICAL);
                 $this->reconnect();
-            } catch (Exception  | AMQPProtocolChannelException $e) {
+            } catch (Exception | AMQPProtocolChannelException $e) {
                 $this->setConnected(false);
                 $this->log($e->getFile() . ": " . $e->getLine(), self::CRITICAL);
                 $this->log($e->getMessage(), self::CRITICAL, $e);
