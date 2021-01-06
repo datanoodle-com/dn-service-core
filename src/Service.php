@@ -816,7 +816,7 @@ abstract class Service implements RabbitInterface
                 }
                 $this->setQueue($this->queue);
                 $this->bindQueue($this->routingKey);
-                $this->consume();
+                $this->consume($this->name . '-' . Uuid::uuid4()->toString());
                 while (count($this->channel->callbacks)) {
                     $this->channel->wait();
                 }
