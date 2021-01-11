@@ -550,6 +550,8 @@ abstract class Service implements RabbitInterface
 
     public function consume($tag = '', $no_local = false, $no_ack = false, $exclusive = false, $nowait = false)
     {
+
+        $this->channel->basic_qos(null, 10, null);
         $this->channel->basic_consume(
             $this->queue,
             $tag,
