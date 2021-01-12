@@ -548,10 +548,28 @@ abstract class Service implements RabbitInterface
         $this->channel->queue_bind($this->errorQueue, $this->errorExchange, $routing_key);
     }
 
-    public function consume($tag = '', $no_local = false, $no_ack = false, $exclusive = false, $nowait = false)
-    {
+    /**
+     * This function handles the consuming of the queue
+     *
+     * @param string $tag
+     * @param bool $no_local
+     * @param bool $no_ack
+     * @param bool $exclusive
+     * @param bool $nowait
+     * @param int|null $prefetch
+     */
+    public function consume(
+        string $tag = '',
+        bool $no_local = false,
+        bool $no_ack = false,
+        bool $exclusive = false,
+        bool $nowait = false,
+        int $prefetch = null
+    ) {
 
-        $this->channel->basic_qos(null, 10, null);
+        if (!is_null($prefetch)) {
+            $this->channel->basic_qos(null, $prefetch, null);
+        }
         $this->channel->basic_consume(
             $this->queue,
             $tag,
