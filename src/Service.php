@@ -192,6 +192,11 @@ abstract class Service implements RabbitInterface
      */
     protected $schedulerConnected;
 
+    /**
+     * @var int
+     */
+    protected $prefetch = 0;
+
     const INFO = "INFO";
     const DEBUG = "DEBUG";
     const ERROR = "ERROR";
@@ -240,6 +245,7 @@ abstract class Service implements RabbitInterface
         $this->rootdir = $dir;
     }
 
+
     private function getEnvVariables()
     {
 
@@ -276,6 +282,11 @@ abstract class Service implements RabbitInterface
                     'API_CLIENT_SECRET'
                 ])->notEmpty();
             }
+
+            if (!empty($_ENV['RMQ_PREFETCH'])) {
+                $this->dotenv->required('RMQ_PREFETCH')->isInteger();
+            }
+
             $this->dotenv->required('RMQ_SSL')->isBoolean();
             $this->dotenv->required('RMQ_PORT')->isInteger();
             $this->dotenv->required('RMQ_RECONNECT_TIMEOUT')->isInteger();
@@ -556,20 +567,19 @@ abstract class Service implements RabbitInterface
      * @param bool $no_ack
      * @param bool $exclusive
      * @param bool $nowait
-     * @param int|null $prefetch
      */
     public function consume(
         string $tag = '',
         bool $no_local = false,
         bool $no_ack = false,
         bool $exclusive = false,
-        bool $nowait = false,
-        int $prefetch = null
+        bool $nowait = false
     ) {
 
-        if (!is_null($prefetch)) {
-            $this->channel->basic_qos(null, $prefetch, null);
+        if ($this->prefetch > 0) {
+            $this->channel->basic_qos(null, $this->prefetch, null);
         }
+        
         $this->channel->basic_consume(
             $this->queue,
             $tag,
