@@ -223,6 +223,7 @@ abstract class Service implements RabbitInterface
         $this->setPass();
         $this->setVHost();
         $this->setPeerName();
+        $this->setPrefetch();
         $this->setSQL(false);
         $this->setStdLogging();
         $this->setApiClient();
