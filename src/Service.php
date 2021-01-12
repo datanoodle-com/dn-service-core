@@ -415,6 +415,16 @@ abstract class Service implements RabbitInterface
         $this->pass = $_ENV['RMQ_PASSWORD'];
     }
 
+    /**
+     * Sets the class prefetch value
+     */
+    public function setPrefetch(): void
+    {
+        if ($_ENV['RMQ_PREFETCH'] > 0) {
+            $this->prefetch = $_ENV['RMQ_PREFETCH'];
+        }
+    }
+
     public function setSSL($ssl = null)
     {
         if (empty($ssl)) {
@@ -579,7 +589,7 @@ abstract class Service implements RabbitInterface
         if ($this->prefetch > 0) {
             $this->channel->basic_qos(null, $this->prefetch, null);
         }
-        
+
         $this->channel->basic_consume(
             $this->queue,
             $tag,
