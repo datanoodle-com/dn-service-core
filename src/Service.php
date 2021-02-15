@@ -192,11 +192,6 @@ abstract class Service implements RabbitInterface
      */
     protected $schedulerConnected;
 
-    /**
-     * @var int
-     */
-    protected $prefetch = 0;
-
     const INFO = "INFO";
     const DEBUG = "DEBUG";
     const ERROR = "ERROR";
@@ -223,7 +218,6 @@ abstract class Service implements RabbitInterface
         $this->setPass();
         $this->setVHost();
         $this->setPeerName();
-        $this->setPrefetch();
         $this->setSQL(false);
         $this->setStdLogging();
         $this->setApiClient();
@@ -246,7 +240,6 @@ abstract class Service implements RabbitInterface
         $this->rootdir = $dir;
     }
 
-
     private function getEnvVariables()
     {
 
@@ -263,12 +256,13 @@ abstract class Service implements RabbitInterface
             } catch (InvalidPathException $e) {
                 $this->log('Couldn\'t find the env, check for the current directory', self::ERROR);
                 $this->rootdir = dirname(__DIR__) . '/';
-                $this->dotenv = new Dotenv($this->rootdir);
+                $this->dotenv = Dotenv::createMutable($this->rootdir);
                 $this->dotenv->load();
                 $this->log('loaded the env file locally');
             }
 
             $this->log('Successfully loaded the environment variables', self::DEBUG);
+
             $this->dotenv->required([
                 'RMQ_HOST',
                 'RMQ_USER',
@@ -283,11 +277,6 @@ abstract class Service implements RabbitInterface
                     'API_CLIENT_SECRET'
                 ])->notEmpty();
             }
-
-            if (!empty($_ENV['RMQ_PREFETCH'])) {
-                $this->dotenv->required('RMQ_PREFETCH')->isInteger();
-            }
-
             $this->dotenv->required('RMQ_SSL')->isBoolean();
             $this->dotenv->required('RMQ_PORT')->isInteger();
             $this->dotenv->required('RMQ_RECONNECT_TIMEOUT')->isInteger();
@@ -333,7 +322,6 @@ abstract class Service implements RabbitInterface
         if (!$this->connected) {
             try {
                 if ($this->ssl) {
-                    AMQPSSLConnection::$LIBRARY_PROPERTIES['connection_name'] = ['S', $this->name];
                     $this->connection = new AMQPSSLConnection(
                         $this->host,
                         $this->port,
@@ -344,7 +332,6 @@ abstract class Service implements RabbitInterface
                         ['heartbeat' => 30, 'read_write_timeout' => 60]
                     );
                 } else {
-                    AMQPStreamConnection::$LIBRARY_PROPERTIES['connection_name'] = ['S', $this->name];
                     $this->connection = new AMQPStreamConnection(
                         $this->host,
                         $this->port,
@@ -416,16 +403,6 @@ abstract class Service implements RabbitInterface
         $this->pass = $_ENV['RMQ_PASSWORD'];
     }
 
-    /**
-     * Sets the class prefetch value
-     */
-    public function setPrefetch(): void
-    {
-        if ($_ENV['RMQ_PREFETCH'] > 0) {
-            $this->prefetch = $_ENV['RMQ_PREFETCH'];
-        }
-    }
-
     public function setSSL($ssl = null)
     {
         if (empty($ssl)) {
@@ -458,7 +435,7 @@ abstract class Service implements RabbitInterface
     {
         $this->name = $name;
 
-        $this->serviceLoggingName = $_ENV["LOGGING_NAME"] ?: 'svc-' . $this->name;
+        $this->serviceLoggingName = $_ENV['LOGGING_NAME'] ?: 'svc-' . $this->name;
     }
 
     public function getName()
@@ -570,27 +547,8 @@ abstract class Service implements RabbitInterface
         $this->channel->queue_bind($this->errorQueue, $this->errorExchange, $routing_key);
     }
 
-    /**
-     * This function handles the consuming of the queue
-     *
-     * @param string $tag
-     * @param bool $no_local
-     * @param bool $no_ack
-     * @param bool $exclusive
-     * @param bool $nowait
-     */
-    public function consume(
-        string $tag = '',
-        bool $no_local = false,
-        bool $no_ack = false,
-        bool $exclusive = false,
-        bool $nowait = false
-    ) {
-
-        if ($this->prefetch > 0) {
-            $this->channel->basic_qos(null, $this->prefetch, null);
-        }
-
+    public function consume($tag = '', $no_local = false, $no_ack = false, $exclusive = false, $nowait = false)
+    {
         $this->channel->basic_consume(
             $this->queue,
             $tag,
@@ -617,26 +575,25 @@ abstract class Service implements RabbitInterface
                 }
             }
         }
-        $this->req->getChannel()->basic_ack($this->req->getDeliveryTag());
+        $this->req->delivery_info['channel']->basic_ack(
+            $this->req->delivery_info['delivery_tag']
+        );
     }
 
     private function reschedule()
     {
         $messageObject = $this->getMessageObject(false);
-        if ($messageObject !== null) {
-            if (property_exists($messageObject, 'time')) {
-                $this->log('Rescheduling for ' . $messageObject->time);
-                $this->createSchedule($messageObject);
-                return true;
-            } elseif (property_exists($messageObject, '_schedule')) {
-                $this->log('Received message from Scheduler');
-                return false;
-            } else {
-                $this->log('Received message');
-                return false;
-            }
+        if (property_exists($messageObject, 'time')) {
+            $this->log('Rescheduling for ' . $messageObject->time);
+            $this->createSchedule($messageObject);
+            return true;
+        } elseif (property_exists($messageObject, '_schedule')) {
+            $this->log('Received message from Scheduler');
+            return false;
+        } else {
+            $this->log('Received message');
+            return false;
         }
-        return false;
     }
 
     public function createSchedule($messageObject)
@@ -733,10 +690,7 @@ abstract class Service implements RabbitInterface
     public function sendMessage($array, $exchange, $routingKey)
     {
         if ($this->connected) {
-            $msg = new AMQPMessage((string)json_encode($array), array(
-                'delivery_mode' => AMQPMessage::DELIVERY_MODE_NON_PERSISTENT,
-                'correlation_id' => Uuid::uuid4()->toString()
-            ));
+            $msg = new AMQPMessage((string)json_encode($array), array('correlation_id' => Uuid::uuid4()->toString()));
             $this->channel->basic_publish($msg, $exchange, $routingKey);
         } elseif ($this->schedulerConnected) {// Since we're not connected to rabbit. Let's send it the scheduler.
             $array['time'] = Carbon::NOW()->addSeconds($this->reconnect_timeout)->timestamp;
@@ -855,20 +809,21 @@ abstract class Service implements RabbitInterface
                 if (empty($this->routingKey)) {
                     throw new Exception('No Binding key been set. Did you run $service->bindQueue($routing_key) ?');
                 }
-                $this->setQueue($this->queue);
-                $this->bindQueue($this->routingKey);
-                $this->consume($this->name . '-' . Uuid::uuid4()->toString());
+                $this->consume();
                 while (count($this->channel->callbacks)) {
                     $this->channel->wait();
                 }
             } catch (ErrorException $e) {
                 $this->log($e->getFile() . ": " . $e->getLine(), self::CRITICAL);
                 $this->log($e->getMessage(), self::CRITICAL);
+                $this->log('Reconnecting in ' . filter_var(
+                    $_ENV['RMQ_RECONNECT_TIMEOUT'],
+                    FILTER_VALIDATE_INT
+                ) . ' seconds');
                 $this->reconnect();
-            } catch (AMQPBasicCancelException | AMQPAMQPTimeoutException | AMQPIOException | AMQPRuntimeException $e) {
+            } catch (AMQPTimeoutException | AMQPIOException | AMQPRuntimeException $e) {
                 $this->setConnected(false);
                 $this->log('Rabbit Timeout ' . $e->getMessage(), self::CRITICAL);
-                $this->reconnect();
             } catch (Exception | AMQPProtocolChannelException $e) {
                 $this->setConnected(false);
                 $this->log($e->getFile() . ": " . $e->getLine(), self::CRITICAL);
